@@ -39,3 +39,7 @@ export interface LocationTreeNode {
   parentId?: number;
   children?: LocationTreeNode[];
 }
+
+export interface LocationTreeDto {
+  id?: number;
+}

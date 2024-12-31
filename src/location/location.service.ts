@@ -3,10 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Location } from './location.entity';
 import {
-  CreateLocationDto,
+  CreateLocationDto, LocationTreeDto,
   LocationTreeNode,
-  UpdateLocationDto,
-} from '@app/location/location.dto';
+  UpdateLocationDto
+} from "@app/location/location.dto";
 
 @Injectable()
 export class LocationService {
@@ -27,9 +27,57 @@ export class LocationService {
     return this.locationRepository.save(location);
   }
 
-  async update(id: number, location: UpdateLocationDto): Promise<Location> {
+  //A > B, B > C, C > D
+  //A < D
+  async update(id: number, location: UpdateLocationDto) {
+    //check update parrentId
+    if (location.parentId) {
+      const data = await this.locationRepository.findOne({
+        where: { id: id },
+        relations: ['children'],
+      });
+      if (data) {
+        const arr = this.buildLocationTree(data);
+        if (arr) {
+          const canUpdate = await this.findIdInArray(id, arr);
+          if (!canUpdate) {
+            return [
+              {
+                status: 400,
+                message: 'Không thể cập nhật',
+              },
+            ];
+          }
+        }
+        return arr;
+      }
+    }
     await this.locationRepository.update(id, location);
     return this.locationRepository.findOne({ where: { id } });
+  }
+
+  private async findIdInArray(id: number, array): Promise<boolean> {
+    return array.some(
+      (item) =>
+        item.id === id ||
+        (item.children && this.findIdInArray(id, item.children)),
+    );
+  }
+
+  private async buildLocationTree(
+    node: LocationTreeNode,
+  ): Promise<LocationTreeNode> {
+    const children = await this.locationRepository.find({
+      where: { parent: { id: node.id } },
+      relations: ['children'],
+    });
+
+    return {
+      ...node,
+      children: await Promise.all(
+        children.map((child) => this.buildLocationTree(child)),
+      ),
+    };
   }
 
   async remove(id: number): Promise<void> {
